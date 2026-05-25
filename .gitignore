@@ -1,0 +1,30 @@
+# Datasets / large binaries
+crops/
+DataChallenge2026/
+occlusion_datasets/
+*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Model checkpoints / outputs
+*.pt
+*.pth
+*.ckpt
+checkpoints/
+runs/
+wandb/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
