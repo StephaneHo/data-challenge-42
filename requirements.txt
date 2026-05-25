@@ -1,9 +1,18 @@
-matplotlib
-notebook
-numpy
-pandas
-pillow
-prettytable
-torch
-torchvision
-tqdm
+# Core data + ML
+numpy>=2.0
+pandas>=2.0
+pillow>=10.0
+tqdm>=4.65
+matplotlib>=3.7
+scikit-learn>=1.4
+
+# Training (CPU build for local; on Colab use the CUDA build)
+# For CPU local install:
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+torch>=2.5
+torchvision>=0.20
+
+# Zero-shot pipeline (face parsing)
+transformers>=4.40
+safetensors>=0.4
+huggingface_hub>=0.20

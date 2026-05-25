@@ -251,7 +251,88 @@ Les améliorations à tester avant la soumission #1 (par ordre de priorité) :
 4. Submit le test_predictions.csv
 ```
 
-## 11. Workflow type entre deux soumissions
+## 11. Piste parallèle : zero-shot par segmentation faciale
+
+En complément de l'approche entraînée, on explore une approche **sans entraînement** (zero-shot), proposée par le collègue. L'idée : utiliser des modèles pré-entraînés sur des millions de visages pour mesurer **géométriquement** la zone occludée. Aucun apprentissage requis sur les 100k images IDEMIA.
+
+### Pourquoi cette piste a de la valeur
+
+| Trained (notre baseline) | Zero-shot |
+|---|---|
+| Apprend des 100k images IDEMIA | Modèles pré-entraînés sur millions d'images |
+| Sensible au shift train→test | Probablement plus robuste au shift |
+| Coût GPU significatif | Inference CPU seule, 0 entraînement |
+| Difficile à expliquer | Très interprétable (mesure géométrique directe) |
+| Compte 1 soumission par expérience | Idem, mais errurs décorrélées → bon pour ensemble |
+
+Si la piste donne un signal correct, **un ensemble (trained + zero-shot) est souvent l'amélioration la plus rentable** en compétition, car les deux pipelines font des erreurs très différentes.
+
+### Deux variantes en parallèle
+
+**Pipeline du collègue (complet, 3D-aware)** :
+```
+Image → RetinaFace (detection + alignement)
+      → 3DDFA-V2 (reconstruction 3D du visage)
+      → Pose-aware visible face mesh (calcul de l'aire théorique du visage selon la pose)
+      → Rasterized theoretical visible mask (projection 2D)
+      → BiSeNet face parsing (segmentation observée)
+      → Ratio (théorique − observé) / théorique
+      → Heuristic corrections
+      → Score final
+```
+
+**Variante 2D-only (la nôtre, plus légère)** :
+```
+Image (déjà cropée 224×224 par IDEMIA)
+   → SegFormer face-parsing (jonathandinu/face-parsing, 19 classes CelebAMask-HQ)
+   → Identification des classes "face" (skin, brows, eyes, nose, mouth, lips)
+                     et "occluders" (eye_g, cloth, hair, hat)
+   → Ratio occluder / (face + occluder) dans la zone du visage
+   → Calibration linéaire/isotonique sur 1000 train images vs labels GT
+   → Score calibré
+```
+
+**Différences clés** :
+- Pas de 3DDFA-V2 → pas de gestion explicite de la pose (les crops IDEMIA sont en général frontaux)
+- Pas de RetinaFace → on suppose le crop déjà aligné
+- Tout en 2D dans le plan image
+
+### Valeur de comparaison entre les deux variantes
+
+| Si pipeline collègue gagne | Si variante 2D gagne | Si égales |
+|---|---|---|
+| Le 3D est essentiel pour ce dataset | 2D suffit, on peut simplifier | On ensemble les deux pour décorréler |
+
+C'est une **étude d'ablation** : "est-ce que les étapes 3D apportent réellement quelque chose, ou est-ce que la version 2D suffit pour ces crops alignés ?"
+
+### Choix techniques de la variante 2D
+
+| Décision | Motivation |
+|---|---|
+| **SegFormer `jonathandinu/face-parsing`** | Plus précis que BiSeNet, distribution HuggingFace propre, mêmes 19 classes CelebAMask-HQ |
+| **Pas de MediaPipe / RetinaFace** | Les crops IDEMIA sont déjà alignés ; un détecteur supplémentaire = dépendance lourde sans gain |
+| **Calibration apprise sur 1000 samples train** | La segmentation seule a un biais systématique vs la définition IDEMIA ; un fit linéaire/isotone aligne les échelles |
+| **Architecture modulaire dans `src/zero_shot/`** | Le collègue peut plugger son `3D-aware face mesh` dans le même squelette s'il veut |
+
+### Coût CPU (local, sans GPU)
+
+| Étape | Par image | 15k val | 30k test |
+|---|---|---|---|
+| Inférence SegFormer | ~200 ms | ~50 min | ~1h40 |
+| Post-processing | ~5 ms | ~1 min | ~2 min |
+
+Total : **~1h pour la val, ~2h pour le test**, en arrière-plan sur le CPU local.
+
+### Plan d'exécution
+
+1. **Coder l'architecture modulaire** `src/zero_shot/` (face_parser, occlusion_estimator, calibration, pipeline)
+2. **CLI scripts** dans `scripts/zero_shot/` (predict, fit_calibration, run_on_subset)
+3. **Sanity test sur 100 images** train → scatter plot raw_ratio vs GT. Si corrélation > 0.5, on continue.
+4. **Fit calibration** sur 1000 train.
+5. **Full val** (~1h CPU) → comparer avec notre baseline trained via `estimate_scores.py`.
+6. **Si résultats prometteurs** → full test, candidat de soumission ou composant d'ensemble.
+
+
 
 ```
 1. Idée d'amélioration (ex: plus d'époques)
