@@ -23,6 +23,10 @@ checkpoints/
 runs/
 wandb/
 
+# Intermediate val predictions (regenerated from checkpoints)
+eval/
+logs/
+
 # OS / IDE
 .DS_Store
 Thumbs.db
