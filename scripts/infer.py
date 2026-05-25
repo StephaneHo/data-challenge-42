@@ -32,6 +32,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--output", default=str(REPO_ROOT / "test_predictions.csv"))
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--num-workers", type=int, default=4)
+    p.add_argument("--tta", default="none", choices=["none", "flip"],
+                   help="Test-time augmentation: 'flip' averages prediction on image and its horizontal flip")
     return p.parse_args()
 
 
@@ -51,7 +53,9 @@ def main() -> None:
     ds = FaceOcclusionDataset(test_csv, args.image_dir, transform=get_eval_transforms(), training=False)
     loader = DataLoader(ds, batch_size=args.batch_size, shuffle=False,
                         num_workers=args.num_workers, pin_memory=(device.type == "cuda"))
-    pred_df = predict(model, loader, device)
+    pred_df = predict(model, loader, device, tta=args.tta)
+    if args.tta != "none":
+        print(f"used TTA mode: {args.tta}")
     pred_df["gender"] = "x"
     pred_df.to_csv(args.output, index=False)
     print(f"wrote {args.output} ({len(pred_df)} rows)")

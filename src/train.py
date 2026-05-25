@@ -44,13 +44,28 @@ def train_one_epoch(
     return float(np.mean(losses))
 
 
+def _forward_with_tta(model: nn.Module, X: torch.Tensor, tta: str) -> torch.Tensor:
+    """TTA-aware forward pass.
+
+    tta = "none" : single forward
+    tta = "flip" : average of forward(X) and forward(horizontal_flip(X))
+    """
+    pred = model(X)
+    if tta == "flip":
+        pred_flip = model(torch.flip(X, dims=[3]))
+        pred = (pred + pred_flip) / 2.0
+    elif tta != "none":
+        raise ValueError(f"Unknown tta mode: {tta}")
+    return pred
+
+
 @torch.inference_mode()
-def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> pd.DataFrame:
+def evaluate(model: nn.Module, loader: DataLoader, device: torch.device, tta: str = "none") -> pd.DataFrame:
     model.eval()
     rows = []
     for X, y, gender, filename in tqdm(loader, desc="val", leave=False):
         X = X.to(device, non_blocking=True)
-        pred = model(X).cpu().numpy()
+        pred = _forward_with_tta(model, X, tta).cpu().numpy()
         y_np = y.numpy()
         g_np = gender.numpy()
         for i in range(len(pred)):
@@ -64,12 +79,12 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> pd.D
 
 
 @torch.inference_mode()
-def predict(model: nn.Module, loader: DataLoader, device: torch.device) -> pd.DataFrame:
+def predict(model: nn.Module, loader: DataLoader, device: torch.device, tta: str = "none") -> pd.DataFrame:
     model.eval()
     rows = []
     for X, filename in tqdm(loader, desc="test", leave=False):
         X = X.to(device, non_blocking=True)
-        pred = model(X).cpu().numpy()
+        pred = _forward_with_tta(model, X, tta).cpu().numpy()
         for i in range(len(pred)):
             rows.append({"filename": filename[i], "FaceOcclusion": float(pred[i])})
     return pd.DataFrame(rows)

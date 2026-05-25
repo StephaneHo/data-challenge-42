@@ -52,6 +52,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-balanced-sampler", action="store_true")
     p.add_argument("--no-balanced-loss", action="store_true")
     p.add_argument("--no-pretrained", action="store_true")
+    p.add_argument("--resume", default=None,
+                   help="Path to a checkpoint .pt to load weights from before training")
+    p.add_argument("--no-scheduler", action="store_true",
+                   help="Disable OneCycleLR — recommended when resuming a fine-tune")
     return p.parse_args()
 
 
@@ -92,6 +96,12 @@ def main() -> None:
     model = build_model(args.backbone, pretrained=not args.no_pretrained).to(device)
     print(f"backbone={args.backbone}  params={count_params(model):,}")
 
+    if args.resume is not None:
+        state = torch.load(args.resume, map_location=device, weights_only=True)
+        model.load_state_dict(state["model"])
+        print(f"resumed from {args.resume} (saved at epoch {state.get('epoch', '?')}, "
+              f"val score {state.get('score', float('nan')):.5f})")
+
     loss_fn = WeightedMSELoss(balance_gender=not args.no_balanced_loss)
     ckpt_path = ckpt_dir / f"{args.backbone}_best.pt"
     history = fit(
@@ -104,7 +114,7 @@ def main() -> None:
         loss_fn=loss_fn,
         weight_decay=args.weight_decay,
         checkpoint_path=ckpt_path,
-        use_scheduler=True,
+        use_scheduler=not args.no_scheduler,
     )
 
     hist_path = log_dir / f"{args.backbone}_history.csv"

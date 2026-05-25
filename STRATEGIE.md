@@ -160,39 +160,121 @@ Idées priorisées :
 
 Doit être **au moins aussi bonne que notre meilleur connu** (puisque seule la #10 compte). Probablement un ensemble bien rodé.
 
-## 8. Outils locaux à construire
+## 8. Outils locaux (implémentés)
 
-Pour pouvoir itérer sans submit, on a besoin de :
+Pour pouvoir itérer sans submit, on a construit :
 
-1. **`scripts/eval_val.py`** : charge un checkpoint, calcule les prédictions sur la val locale, sauve `val_predictions.csv` (filename, pred, target, gender).
-2. **`scripts/estimate_scores.py`** : prend `val_predictions.csv`, calcule le score sous plusieurs hypothèses de distribution (train-like, mixte, test-like). Affiche aussi la décomposition par bin et par genre pour identifier d'où viennent les erreurs.
-3. **`--resume` dans `train.py`** : reprend un entraînement depuis un checkpoint (pour étendre 8 → 15 époques sans repartir de zéro).
-4. **Mode TTA dans `infer.py`** : option `--tta flip` qui fait deux passes (original + flip) et moyenne.
+1. **`scripts/eval_val.py`** : charge un checkpoint, calcule les prédictions sur la val locale, sauve `eval/val_*.csv` (filename, pred, target, gender). Option `--tta {none,flip}`.
+2. **`scripts/estimate_scores.py`** : prend un ou plusieurs `val_predictions.csv` :
+   - Affiche le score global (sanity check vs training log)
+   - **Décompose par (genre × bin d'occlusion)** : counts, erreur locale, biais, contribution à l'erreur de chaque genre
+   - **Estime le score sous plusieurs distributions cibles** (val train-like, test-like réaliste, test-like plus étalé, uniforme [0, 0.5])
+   - Compare plusieurs versions côte à côte si plusieurs CSV passés
+3. **`--resume PATH` dans `scripts/train.py`** : reprend un entraînement depuis un checkpoint, pour étendre une run existante (8 → 15 époques) sans repartir de zéro. À combiner avec `--no-scheduler` et un `--lr` plus bas (e.g., 1e-4) pour un fine-tune doux.
+4. **`--tta {none,flip}` dans `scripts/infer.py` et `scripts/eval_val.py`** : flip averaging. La prédiction est la moyenne de `model(X)` et `model(flip(X))`. Coût : ×2 sur le temps d'inférence (5 min au lieu de 3 sur le full test).
 
-## 9. Workflow type entre deux soumissions
+## 9. Analyse d'erreurs sur la baseline (resnet50, 8 époques, balanced)
+
+Effectuée le 2026-05-25 avec `scripts/estimate_scores.py eval/val_resnet50_8ep.csv`. Les chiffres exacts sont à retrouver dans cet output ; les enseignements ci-dessous.
+
+### Distribution des erreurs par (genre × bin)
+
+| bin | err F | err M | constat |
+|---|---|---|---|
+| [0.00, 0.05) | 0.00072 | 0.00066 | OK partout |
+| [0.05, 0.15) | ~0.0005 | ~0.0008 | OK |
+| [0.15, 0.30) | ~0.0007 | 0.0009-0.0012 | Hommes commencent à dériver |
+| [0.30, 0.50) | 0.00079 | **0.00383** | **M = 5× pire que F** |
+| [0.50, 1.01) | 0.00732 | **0.17598** | **M = 24× pire que F** (3 samples) |
+
+### Bias systématique (regression to the mean)
+
+| bin | bias F | bias M |
+|---|---|---|
+| [0.00, 0.05) | +0.016 | +0.015 (sur-prédit ~+15%) |
+| [0.15, 0.20) | ~0 | ~0 (bien calibré) |
+| [0.30, 0.50) | −0.011 | −0.031 (sous-prédit) |
+| [0.50, 1.01) | −0.082 | −0.280 (sous-prédit massivement) |
+
+Pattern net : le modèle **tire toutes ses prédictions vers la zone [0.10, 0.20]**, sa "zone de confort". Il a peur de prédire 0% ou 50%+ même quand c'est la vérité. Classique avec un sampler balancé agressif qui force le modèle à voir des hautes occlusions, mais sans suffisamment d'exemples pour qu'il commit vraiment dessus.
+
+### D'où vient l'erreur totale ?
+
+Sur la val, 30% de l'erreur masculine (Err_M = 0.00135) provient des **3 samples à occlusion > 50%**. Ça veut dire :
+- L'erreur globale est statistiquement instable (3 samples seulement)
+- Mais structurellement, **on est mauvais sur le tail haute occlusion**
+- Sur le test, s'il y a même seulement 1-2% d'images en [0.50+) avec des hommes, ça pourrait dégrader fortement le score
+
+### Estimations interim/final avec ces erreurs
+
+| Distribution cible | Score estimé |
+|---|---|
+| val (train-like) | 0.00171 |
+| uniform [0, 0.50) | 0.00364 |
+| test-like (realistic, estimé depuis brief histogram) | 0.01068 |
+| test-like (more spread) | 0.01734 |
+
+**Le score interim attendu sur hfactory est probablement entre 0.004 et 0.011.**
+
+## 10. Décisions issues de cette analyse
+
+Les améliorations à tester avant la soumission #1 (par ordre de priorité) :
+
+### A. Plus d'époques (12-15 vs 8 actuelles)
+- **Pourquoi** : la loss baissait encore à l'époque 8 (0.00017 vs val 0.00171, signe que le modèle pourrait apprendre encore)
+- **Comment** : `python scripts/train.py --resume checkpoints/resnet50_best.pt --epochs 7 --lr 1e-4 --no-scheduler`
+- **Coût** : ~1h Colab supplémentaire
+- **Risque** : faible (le modèle peut overfitter si on pousse trop, à surveiller via val)
+
+### B. TTA en inférence (flip averaging)
+- **Pourquoi** : gain quasi gratuit, presque garanti, n'overfitte pas
+- **Comment** : `python scripts/infer.py --checkpoint ... --tta flip`
+- **Coût** : 5 min d'inférence en plus (vs 3 sans TTA)
+- **Risque** : très faible
+
+### C. Tester un sampler moins agressif (à itération suivante)
+- **Pourquoi** : notre `err_m > err_f` suggère qu'on a sur-corrigé. Le sampler balanced a privilégié les femmes en hautes occlusions, mais a coupé l'exposition des hommes en faibles occlusions
+- **Comment** : `python scripts/train.py --no-balanced-sampler --no-balanced-loss` (un puis l'autre puis les deux)
+- **Risque** : moyen — on peut perdre la maîtrise du gap F/M
+
+### D. Augmentation synthétique haute occlusion (plus tard)
+- **Pourquoi** : 36 samples > 0.5 dans 100k de train, c'est minuscule. Si on génère 5000 samples synthétiques en superposant des formes opaques avec aire calculée, on peut combler le tail
+- **Coût** : 3-4h de dev
+- **Risque** : moyen — dépend de la qualité du synthétique
+
+### Plan pour la #1
+
+```
+1. Reprendre l'entraînement à partir du checkpoint actuel pour 7 époques de plus (lr=1e-4)
+2. Inférence sur test avec --tta flip
+3. estimate_scores sur val avec TTA pour s'assurer du gain
+4. Submit le test_predictions.csv
+```
+
+## 11. Workflow type entre deux soumissions
 
 ```
 1. Idée d'amélioration (ex: plus d'époques)
-2. Implémenter localement
-3. Entraîner sur Colab
-4. Télécharger le checkpoint et val_predictions.csv
-5. Local : python scripts/estimate_scores.py val_predictions.csv
-   → estimation interim/final
-6. Si gain significatif vs précédent → submit
+2. Implémenter / entraîner sur Colab
+3. python scripts/eval_val.py --checkpoint XYZ.pt --backbone X --out eval/val_xyz.csv
+4. Télécharger val_xyz.csv en local
+5. python scripts/estimate_scores.py eval/val_*.csv  (compare toutes les versions)
+6. Si gain net vs précédent → submit
    Sinon → garde l'idée comme bouchon ou rejette
 ```
 
-## 10. Référence : ce qu'on connaît déjà
+## 12. Référence : ce qu'on connaît déjà
 
 | Repère | Score |
 |---|---|
 | Random / 0 constant | ~0.04 |
 | Prédire la moyenne train (0.083) | ~0.018 |
 | Baseline starter notebook (MSE, 1 epoch) | 0.00428 |
-| **Notre resnet50, 8 époques, balanced, val** | **0.00171** |
+| **Notre resnet50, 8 époques, balanced, val (train-like)** | **0.00171** |
+| Notre resnet50, 8 époques, balanced, estimé interim hfactory | **~0.004 - 0.011** |
 | Très bon modèle sur ce type de tâche | ~0.001 |
 | Score parfait (théorique) | 0 |
 
 ---
 
-**Dernière mise à jour** : 2026-05-25, avant la soumission #1.
+**Dernière mise à jour** : 2026-05-25, après analyse fine des erreurs, avant la soumission #1.
