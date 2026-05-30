@@ -32,3 +32,7 @@ logs/
 Thumbs.db
 .vscode/
 .idea/
+
+# Additional repositories
+3DDFA_V2/
+face-parsing.PyTorch/
