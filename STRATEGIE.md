@@ -2,6 +2,19 @@
 
 Ce document trace les décisions techniques et stratégiques prises pour ce challenge, avec leurs raisons. Objectif : pouvoir reprendre le fil entre deux sessions et expliquer chaque choix à un examinateur.
 
+## 🎯 Décision stratégique majeure (2026-05-26)
+
+**On abandonne la track Model Training. Toutes les soumissions vont à la track Training-Free.**
+
+Conséquences :
+- Plus d'investissement Colab GPU (training d'un meilleur ResNet50, EfficientNet, etc.)
+- `trained_resnet50_8ep_balanced` reste comme référence numérique de calibration, **pas comme candidat de soumission**
+- Toutes les nouvelles variantes doivent être **TF-compliant** : pas de Ridge/Lasso/SVM, pas de fit appris sur le dataset, pas de calibration globale apprise. Heuristiques fixes uniquement.
+- Pipelines actifs :
+  - **`julien_*`** : 3DDFA-V2 + BiSeNet + heuristiques (le pipeline principal du collègue)
+  - **`zero_shot_v*_heuristic`** : notre SegFormer + heuristiques (alternative et complémentaire)
+- Budget 10 soumissions hfactory **entièrement réservé à la track TF**.
+
 ## 1. Le problème
 
 **Tâche** : régresser le pourcentage d'occlusion d'un visage (valeur dans `[0, 1]`) à partir d'une image 224×224.

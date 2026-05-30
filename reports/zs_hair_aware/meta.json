@@ -1,0 +1,26 @@
+{
+  "variant": "zs_hair_aware",
+  "notes": "TF-compliant SegFormer heuristic 'hair_aware'",
+  "predictions_source": "C:\\Users\\steph\\AI_Projects\\PART_4\\Data_Challenge_42\\data-challenge-42\\eval\\val_zs_hair_aware.csv",
+  "eval_subset_size": 2000,
+  "eval_subset_hash": "1b1686fba414",
+  "val_frac": 0.15,
+  "seed": 42,
+  "timestamp": 1780176836.0763237,
+  "design_samples": [
+    "first 5 train rows (m.02jfg1/35-...",
+    "m.0256vn/81-...",
+    "m.01dgwg/29-...",
+    "m.02l0nk/72-...",
+    "m.026jp3/94-...) inspected to set scaling factors 1.5 and weights 0.5/0.3/0.2"
+  ],
+  "val_empirical_bin_probs": {
+    "[0.00,0.05)": 0.485,
+    "[0.05,0.10)": 0.1855,
+    "[0.10,0.15)": 0.1335,
+    "[0.15,0.20)": 0.0845,
+    "[0.20,0.30)": 0.077,
+    "[0.30,0.50)": 0.0345,
+    "[0.50,1.01)": 0.0
+  }
+}

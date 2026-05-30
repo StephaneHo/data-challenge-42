@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python.exe scripts/compare_reports.py --markdown)",
+      "Bash(.venv/Scripts/python.exe -c ' *)",
+      "Bash(MKL_NUM_THREADS=8 OMP_NUM_THREADS=8 .venv/Scripts/python.exe scripts/zero_shot/cache_val_features.py --batch-size 8)",
+      "Bash(.venv/Scripts/python.exe scripts/compare_reports.py)"
+    ]
+  }
+}

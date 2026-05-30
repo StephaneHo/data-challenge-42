@@ -28,6 +28,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--sort-by", default="test-like (from brief)",
                    help="column to sort by (default: estimated final score)")
     p.add_argument("--out", default=None, help="optional path to save the CSV")
+    p.add_argument("--markdown", action="store_true",
+                   help="emit a paste-ready markdown table (for EXPERIMENTS.md)")
+    p.add_argument("--reference", default=None,
+                   help="Variant name to use as the reference for delta columns. "
+                        "Defaults to the first row after sorting (i.e. the best variant).")
+    p.add_argument("--per-bin", action="store_true",
+                   help="Also load reports/<variant>/per_bin.csv and print bin breakdown "
+                        "per gender for each variant.")
     return p.parse_args()
 
 
@@ -86,13 +94,62 @@ def main() -> None:
     if args.sort_by in df.columns:
         df = df.sort_values(args.sort_by).reset_index(drop=True)
 
+    # Determine reference row for delta computation
+    if args.reference and args.reference in df["variant"].values:
+        ref_row = df[df["variant"] == args.reference].iloc[0]
+        ref_name = args.reference
+    else:
+        ref_row = df.iloc[0]
+        ref_name = ref_row["variant"]
+
+    # Compute deltas vs reference
+    df["delta_score"] = df["score"] - ref_row["score"]
+    df["delta_gap"] = df["gap"] - ref_row["gap"]
+    if "test-like (from brief)" in df.columns:
+        df["delta_test_like"] = df["test-like (from brief)"] - ref_row["test-like (from brief)"]
+
     # Pretty-print
-    display_cols = ["variant", "score", "err_F", "err_M", "gap"]
+    display_cols = ["variant", "score", "err_F", "err_M", "gap",
+                    "delta_score", "delta_gap"]
     reweight_cols = [c for c in df.columns
                      if c in ("val (subset native)", "test-like (from brief)",
                               "test-like (more spread)", "uniform [0, 0.50)")]
     display_cols += reweight_cols
-    print(df[display_cols].round(5).to_string(index=False))
+    if "delta_test_like" in df.columns:
+        display_cols.append("delta_test_like")
+
+    print(f"\nreference variant: {ref_name}")
+    print("(delta_* columns: negative = improvement vs reference)\n")
+
+    if args.markdown:
+        # Compact markdown row format intended for EXPERIMENTS.md
+        print("| Variant | Subset score | delta vs ref | Test-like est. | delta vs ref | Gap F/M | delta gap |")
+        print("|---|---|---|---|---|---|---|")
+        for _, row in df.iterrows():
+            test_like = row.get("test-like (from brief)", float("nan"))
+            delta_tl = row.get("delta_test_like", float("nan"))
+            arrow_score = "(ref)" if row["variant"] == ref_name else (
+                f"{row['delta_score']:+.5f}"
+            )
+            arrow_tl = "(ref)" if row["variant"] == ref_name else f"{delta_tl:+.5f}"
+            arrow_gap = "(ref)" if row["variant"] == ref_name else f"{row['delta_gap']:+.5f}"
+            print(f"| `{row['variant']}` | {row['score']:.5f} | {arrow_score} | "
+                  f"{test_like:.5f} | {arrow_tl} | {row['gap']:.5f} | {arrow_gap} |")
+    else:
+        print(df[display_cols].round(5).to_string(index=False))
+
+    # Optional per-bin breakdown
+    if args.per_bin:
+        print("\n" + "=" * 70 + "\nPer-bin breakdown (weighted error per gender × bin)")
+        for _, row in df.iterrows():
+            variant = row["variant"]
+            bin_path = Path(args.reports_dir) / variant / "per_bin.csv"
+            if not bin_path.exists():
+                continue
+            bb = pd.read_csv(bin_path)
+            pivot = bb.pivot(index="bin", columns="gender", values="weighted_err")
+            print(f"\n--- {variant} ---")
+            print(pivot.round(5).to_string())
 
     if args.out:
         out = Path(args.out)
