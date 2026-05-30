@@ -34,17 +34,20 @@ from src.metric import (  # noqa: E402
 # Hypothesized target distributions per occlusion bin.
 # Bins: [0.00,0.05) [0.05,0.10) [0.10,0.15) [0.15,0.20) [0.20,0.30) [0.30,0.50) [0.50,1.01)
 #
-# Estimated from brief test histogram (29980 images, peak near 0, decay to ~0.5):
-#   "test-like (realistic)"     — best guess from histogram inspection
-#   "test-like (more spread)"   — slightly more high-occlusion than realistic
-# Diagnostic targets (avoid the [0.50+) bin which is unstable with few val samples):
-#   "uniform [0, 0.50)"         — flat over the reachable range, zero tail
-#   "val (train-like)"          — the file's own distribution (no reweighting)
+# "test-like (from brief)" — estimated by visual inspection of the test FaceOcclusion
+#                            histogram printed in task_brief.pdf (29980 images).
+#                            This is our best guess for the FINAL evaluation distribution.
+# "test-like (more spread)" — slightly more high-occlusion than the brief estimate,
+#                              for sensitivity analysis.
+# "uniform [0, 0.50)"      — flat over the reachable range, used as a diagnostic
+#                              (avoids the [0.50+) tail which is statistically unstable).
+# "val (train-like)"       — the file's own distribution, no reweighting (sanity check
+#                              that we recover the training-log val score).
 TARGET_DISTRIBUTIONS = {
-    "val (train-like)":          None,
-    "test-like (realistic)":     [0.15, 0.18, 0.18, 0.16, 0.22, 0.10, 0.01],
-    "test-like (more spread)":   [0.10, 0.15, 0.15, 0.15, 0.25, 0.18, 0.02],
-    "uniform [0, 0.50)":         [1, 1, 1, 1, 2, 4, 0],   # bins [0.20,0.30) and [0.30,0.50) are wider
+    "val (train-like)":            None,
+    "test-like (from brief)":      [0.13, 0.17, 0.18, 0.17, 0.22, 0.12, 0.01],
+    "test-like (more spread)":     [0.10, 0.15, 0.15, 0.15, 0.25, 0.18, 0.02],
+    "uniform [0, 0.50)":           [1, 1, 1, 1, 2, 4, 0],
 }
 
 

@@ -5,6 +5,8 @@ pillow>=10.0
 tqdm>=4.65
 matplotlib>=3.7
 scikit-learn>=1.4
+scipy>=1.10
+opencv-python>=4.8
 
 # Training (CPU build for local; on Colab use the CUDA build)
 # For CPU local install:
@@ -12,7 +14,19 @@ scikit-learn>=1.4
 torch>=2.5
 torchvision>=0.20
 
-# Zero-shot pipeline (face parsing)
+# Zero-shot pipeline — face parsing (our 2D variant)
 transformers>=4.40
 safetensors>=0.4
 huggingface_hub>=0.20
+
+# Zero-shot pipeline — Julien's training-free notebook (DataChallengeJulien_TF.ipynb)
+# Requires also two cloned repos (NOT installable via pip — see notebook for setup):
+#   - 3DDFA_V2/             (https://github.com/cleardusk/3DDFA_V2 — provides TDDFA, utils.pose)
+#                           Once cloned, run: pip install -r 3DDFA_V2/requirements.txt
+#   - face-parsing.PyTorch/ (https://github.com/zllrunning/face-parsing.PyTorch — provides BiSeNet)
+insightface>=0.7
+onnxruntime>=1.16
+gdown>=4.7
+
+# Notebook development
+ipykernel>=6.20

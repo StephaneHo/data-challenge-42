@@ -323,14 +323,83 @@ C'est une **étude d'ablation** : "est-ce que les étapes 3D apportent réelleme
 
 Total : **~1h pour la val, ~2h pour le test**, en arrière-plan sur le CPU local.
 
-### Plan d'exécution
+### Résultats obtenus (2026-05-26)
 
-1. **Coder l'architecture modulaire** `src/zero_shot/` (face_parser, occlusion_estimator, calibration, pipeline)
-2. **CLI scripts** dans `scripts/zero_shot/` (predict, fit_calibration, run_on_subset)
-3. **Sanity test sur 100 images** train → scatter plot raw_ratio vs GT. Si corrélation > 0.5, on continue.
-4. **Fit calibration** sur 1000 train.
-5. **Full val** (~1h CPU) → comparer avec notre baseline trained via `estimate_scores.py`.
-6. **Si résultats prometteurs** → full test, candidat de soumission ou composant d'ensemble.
+**Variante v0 — Ridge calibration sur 500 train (NON Training-Free compliant)** :
+- Val 15k full : **0.00954**
+- Train 500 (calibration set) : 0.00735 (1.55× écart, calibration légèrement overfit)
+- Pattern d'erreur : err_F (0.00844) > err_M (0.00624) — **inverse de notre trained**
+
+**Ensemble linéaire trained + zero-shot sur 15k val** :
+- alpha=1.0 (pure trained) : 0.00171
+- alpha=0.98 (best) : 0.00171
+- **Gain effectif : nul** (-0.00000)
+- À alpha=0.50, le gap F/M tombe à 0.00004 mais le score global monte à 0.00262 — pas viable
+
+**Verdict** : le simple blend linéaire trained+zero_shot n'apporte rien sur la val officielle. Les deux modèles ont des erreurs sur des populations différentes mais le poids optimal converge vers "pure trained".
+
+### Réutilisations possibles malgré ça
+
+- Les prédictions test zero-shot (`results/zero_shot/test_predictions.csv`, 29980 lignes) sont prêtes pour un futur ré-essai d'ensemble avec un meilleur modèle trained (15 ep + TTA).
+- Le pipeline (SegFormer + features + calibrator) est réutilisable comme briquue dans un ensemble plus sophistiqué (stacking, selective blend par bin d'occlusion).
+
+### ⚠️ Limite critique pour la track Training-Free
+
+Notre `OcclusionCalibrator(mode="linear")` utilise `sklearn.linear_model.Ridge` fit sur 500 train samples. **C'est explicitement prohibé** par les règles training-free :
+> "Algorithms that ingest the whole dataset to optimize parameters (such as ... Ridge/Lasso regression ..., or learned global calibration) are prohibited in this track."
+
+Pour soumettre dans la track Training-Free, il faut remplacer la calibration apprise par des **heuristiques fixes** conçues depuis l'inspection manuelle de 3-5 images, pas un fit. C'est la voie que prend Julien avec ses "heuristic corrections" en fin de pipeline.
+
+## 12. Estimation calibrée sur la distribution test (depuis le brief)
+
+L'histogramme test publié dans `task_brief.pdf` (29980 images) donne notre meilleure estimation de la distribution sur laquelle on est noté à la fin. Approximation des fractions par bin :
+
+| bin | Train (val empirique) | Test (brief) | Ratio |
+|---|---|---|---|
+| [0.00, 0.05) | 50% | ~13% | 0.26× |
+| [0.05, 0.10) | 19% | ~17% | 0.90× |
+| [0.10, 0.15) | 12% | ~18% | 1.49× |
+| [0.15, 0.20) | 7% | ~17% | 2.27× |
+| [0.20, 0.30) | 8% | ~22% | 2.62× |
+| [0.30, 0.50) | 3% | ~12% | 3.87× |
+| [0.50, 1.01) | 0.03% | <1% | ~30× |
+
+Cette distribution est encodée dans `scripts/estimate_scores.py` et `scripts/eval_harness.py` sous le nom `"test-like (from brief)"`. Tous les rapports `reports/<variant>/` la reportent.
+
+**Estimations actuelles du score sous cette distribution** :
+- Trained ResNet50 8ep balanced : **0.00212**
+- Zero-shot v0 (Ridge calibration) : 0.01704
+
+## 13. Cadre d'évaluation pour la track Training-Free
+
+Pour éviter d'iterer implicitement contre l'eval subset (ce qui violerait l'esprit training-free), on a mis en place :
+
+### `scripts/eval_harness.py`
+
+Évalue une variante du pipeline contre un **eval subset fixé et hashé** (2000 samples, dérivés du split val stratifié seed=42), et écrit un **rapport reproductible** dans `reports/<variant>/` :
+
+```
+reports/<variant>/
+  meta.json        — eval_subset_hash, design_samples utilisés, notes
+  score.json       — score officiel + estimations reweighted (4 distributions)
+  per_bin.csv      — décomposition (gender × bin)
+  predictions.csv  — les prédictions évaluées
+```
+
+Le harness **refuse l'overwrite** sans `--force`, pour matérialiser le coût d'iterer contre le subset.
+
+### `scripts/compare_reports.py`
+
+Lit tous les `reports/*/score.json` et imprime un tableau de comparaison côte à côte. Vérifie que tous les rapports ont été générés contre le même subset (sinon les scores absolus ne sont pas comparables).
+
+### État actuel des rapports (2026-05-26)
+
+| variant | subset | score | err_F | err_M | gap | test-like (brief) |
+|---|---|---|---|---|---|---|
+| trained_resnet50_8ep_balanced | 1b1686fb | 0.00128 | 0.00052 | 0.00103 | 0.00051 | **0.00212** |
+| zero_shot_v0_calibrated | 1b1686fb | 0.01035 | 0.00880 | 0.00569 | 0.00311 | 0.01704 |
+
+Pour itérer sur de nouvelles variantes, **la régle de bon usage est 1 évaluation par variante** ; au-delà on triche.
 
 
 
