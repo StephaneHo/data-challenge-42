@@ -109,13 +109,142 @@ def hair_aware(feats: pd.DataFrame) -> np.ndarray:
     return np.clip(base + 0.2 * hair, 0.0, 1.0)
 
 
+def simple_hull_scaled_power07(feats: pd.DataFrame) -> np.ndarray:
+    """`simple_hull_scaled` raised to the power 0.7.
+
+    Motivation: our best heuristic systematically under-predicts the high
+    occlusion tail (regression-to-mean). A concave power transform compresses
+    low values less than high ones, effectively boosting the tail. The 0.7
+    exponent is the smallest round value that makes the median prediction on
+    the inspection set match the train median on samples with GT > 0.2.
+    """
+    base = np.clip(feats["ratio_hull"].to_numpy(dtype=np.float64) * 1.5, 0.0, 1.0)
+    return np.power(base, 0.7)
+
+
+def simple_hull_scaled_power05(feats: pd.DataFrame) -> np.ndarray:
+    """`simple_hull_scaled` raised to the power 0.5 (sqrt).
+
+    More aggressive tail boost than power07.
+    """
+    base = np.clip(feats["ratio_hull"].to_numpy(dtype=np.float64) * 1.5, 0.0, 1.0)
+    return np.sqrt(base)
+
+
+def class_weighted(feats: pd.DataFrame) -> np.ndarray:
+    """Geometric ratio + bonus from explicit per-class areas inside the hull.
+
+    Unlike `multi_feature`, the geometric `ratio_hull` keeps a weight of 1.0
+    (not halved). The other classes add to it rather than replacing it.
+
+    Weights:
+      ratio_hull         : 1.0  (geometry dominates)
+      bg_in_hull_frac    : 0.5  (background inside face = hand/strong occluder)
+      occluder_in_hull   : 0.3  (glasses/hat/cloth)
+      hair_in_hull       : 0.1  (hair sometimes occludes)
+    """
+    pred = (
+        1.0 * feats["ratio_hull"].to_numpy(dtype=np.float64)
+        + 0.5 * feats["bg_in_hull_frac"].to_numpy(dtype=np.float64)
+        + 0.3 * feats["occluder_in_hull_frac"].to_numpy(dtype=np.float64)
+        + 0.1 * feats["hair_in_hull_frac"].to_numpy(dtype=np.float64)
+    )
+    return np.clip(pred, 0.0, 1.0)
+
+
+def class_weighted_scaled(feats: pd.DataFrame) -> np.ndarray:
+    """`class_weighted` × 1.5 (same scaling logic as simple_hull_scaled)."""
+    pred = (
+        1.0 * feats["ratio_hull"].to_numpy(dtype=np.float64)
+        + 0.5 * feats["bg_in_hull_frac"].to_numpy(dtype=np.float64)
+        + 0.3 * feats["occluder_in_hull_frac"].to_numpy(dtype=np.float64)
+        + 0.1 * feats["hair_in_hull_frac"].to_numpy(dtype=np.float64)
+    )
+    return np.clip(pred * 1.5, 0.0, 1.0)
+
+
+def adaptive_floor(feats: pd.DataFrame) -> np.ndarray:
+    """`simple_hull_scaled` with a fixed floor when an occluder is detected.
+
+    Motivation: if the parser clearly identifies an occluder class (eyeg, hat,
+    cloth) at > 5% of the face area, we know the face is non-trivially
+    occluded. Force at least 0.15 to avoid the regression-to-mean undershoot.
+    """
+    base = np.clip(feats["ratio_hull"].to_numpy(dtype=np.float64) * 1.5, 0.0, 1.0)
+    occluder_present = feats["occluder_in_hull_frac"].to_numpy(dtype=np.float64) > 0.05
+    return np.where(occluder_present, np.maximum(base, 0.15), base)
+
+
+def piecewise_boost(feats: pd.DataFrame) -> np.ndarray:
+    """Piecewise linear transformation of `simple_hull_scaled`.
+
+    Identity below 0.1 (cheap to under-predict tiny values),
+    linear stretch in [0.1, 0.5] (boost the mid range),
+    saturating above 0.5.
+    """
+    x = np.clip(feats["ratio_hull"].to_numpy(dtype=np.float64) * 1.5, 0.0, 1.0)
+    out = np.where(
+        x < 0.1, x,
+        np.where(x < 0.5, 0.1 + 1.3 * (x - 0.1), 0.62 + 0.5 * (x - 0.5))
+    )
+    return np.clip(out, 0.0, 1.0)
+
+
+def simple_hull_scaled_power06(feats: pd.DataFrame) -> np.ndarray:
+    """Tail boost at exponent 0.6 (between 0.7 and 0.5)."""
+    base = np.clip(feats["ratio_hull"].to_numpy(dtype=np.float64) * 1.5, 0.0, 1.0)
+    return np.power(base, 0.6)
+
+
+def simple_hull_scaled_power08(feats: pd.DataFrame) -> np.ndarray:
+    """Mild tail boost at exponent 0.8."""
+    base = np.clip(feats["ratio_hull"].to_numpy(dtype=np.float64) * 1.5, 0.0, 1.0)
+    return np.power(base, 0.8)
+
+
+def class_weighted_scaled_power07(feats: pd.DataFrame) -> np.ndarray:
+    """Combine class_weighted_scaled with power 0.7 tail boost."""
+    raw = (
+        1.0 * feats["ratio_hull"].to_numpy(dtype=np.float64)
+        + 0.5 * feats["bg_in_hull_frac"].to_numpy(dtype=np.float64)
+        + 0.3 * feats["occluder_in_hull_frac"].to_numpy(dtype=np.float64)
+        + 0.1 * feats["hair_in_hull_frac"].to_numpy(dtype=np.float64)
+    )
+    base = np.clip(raw * 1.5, 0.0, 1.0)
+    return np.power(base, 0.7)
+
+
+def class_weighted_scaled_power06(feats: pd.DataFrame) -> np.ndarray:
+    raw = (
+        1.0 * feats["ratio_hull"].to_numpy(dtype=np.float64)
+        + 0.5 * feats["bg_in_hull_frac"].to_numpy(dtype=np.float64)
+        + 0.3 * feats["occluder_in_hull_frac"].to_numpy(dtype=np.float64)
+        + 0.1 * feats["hair_in_hull_frac"].to_numpy(dtype=np.float64)
+    )
+    base = np.clip(raw * 1.5, 0.0, 1.0)
+    return np.power(base, 0.6)
+
+
 HEURISTICS = {
+    # Original family (kept for comparability)
     "simple_hull":          simple_hull,
     "simple_hull_scaled":   simple_hull_scaled,
     "multi_feature":        multi_feature,
     "multi_feature_scaled": multi_feature_scaled,
     "pose_aware":           pose_aware,
     "hair_aware":           hair_aware,
+    # Phase A: instant variants on cached features
+    "simple_hull_scaled_power07": simple_hull_scaled_power07,
+    "simple_hull_scaled_power05": simple_hull_scaled_power05,
+    "class_weighted":             class_weighted,
+    "class_weighted_scaled":      class_weighted_scaled,
+    "adaptive_floor":             adaptive_floor,
+    "piecewise_boost":            piecewise_boost,
+    # Phase A2: power transformation sweep + class_weighted combinations
+    "simple_hull_scaled_power06":     simple_hull_scaled_power06,
+    "simple_hull_scaled_power08":     simple_hull_scaled_power08,
+    "class_weighted_scaled_power07":  class_weighted_scaled_power07,
+    "class_weighted_scaled_power06":  class_weighted_scaled_power06,
 }
 
 

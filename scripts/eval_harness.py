@@ -52,7 +52,7 @@ from src.metric import (  # noqa: E402
 
 # Same distributions as estimate_scores.py (kept in sync intentionally).
 TARGET_DISTRIBUTIONS = {
-    "test-like (from brief)":      [0.13, 0.17, 0.18, 0.17, 0.22, 0.12, 0.01],
+    "test-like (from brief)":      [0.18, 0.16, 0.14, 0.15, 0.26, 0.15, 0.003],
     "test-like (more spread)":     [0.10, 0.15, 0.15, 0.15, 0.25, 0.18, 0.02],
     "uniform [0, 0.50)":           [1, 1, 1, 1, 2, 4, 0],
 }

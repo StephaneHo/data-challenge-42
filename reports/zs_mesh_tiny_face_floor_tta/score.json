@@ -1,0 +1,17 @@
+{
+  "official_score": {
+    "err_female": 0.009236815012605119,
+    "err_male": 0.01829746185531516,
+    "mean_err": 0.01376713843396014,
+    "gap": 0.009060646842710041,
+    "score": 0.022827785276670183,
+    "n_female": 727,
+    "n_male": 1273
+  },
+  "reweighted_scores": {
+    "val (subset native)": 0.022827785276670183,
+    "test-like (from brief)": 0.018101611468325826,
+    "test-like (more spread)": 0.0189473472638661,
+    "uniform [0, 0.50)": 0.02604010003079477
+  }
+}

@@ -10,7 +10,7 @@
   },
   "reweighted_scores": {
     "val (subset native)": 0.043809281685491266,
-    "test-like (from brief)": 0.04507245552097822,
+    "test-like (from brief)": 0.05021610285707921,
     "test-like (more spread)": 0.0546212171499835,
     "uniform [0, 0.50)": 0.07843055005704244
   }

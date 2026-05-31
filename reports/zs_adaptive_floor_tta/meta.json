@@ -1,0 +1,22 @@
+{
+  "variant": "zs_adaptive_floor_tta",
+  "notes": "TF-compliant SegFormer heuristic 'adaptive_floor' + TTA flip averaging",
+  "predictions_source": "C:\\Users\\steph\\AI_Projects\\PART_4\\Data_Challenge_42\\data-challenge-42\\eval\\val_zs_adaptive_floor_tta.csv",
+  "eval_subset_size": 2000,
+  "eval_subset_hash": "1b1686fba414",
+  "val_frac": 0.15,
+  "seed": 42,
+  "timestamp": 1780241033.6422398,
+  "design_samples": [
+    "same 5 train samples as previous variants"
+  ],
+  "val_empirical_bin_probs": {
+    "[0.00,0.05)": 0.485,
+    "[0.05,0.10)": 0.1855,
+    "[0.10,0.15)": 0.1335,
+    "[0.15,0.20)": 0.0845,
+    "[0.20,0.30)": 0.077,
+    "[0.30,0.50)": 0.0345,
+    "[0.50,1.01)": 0.0
+  }
+}

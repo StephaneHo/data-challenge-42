@@ -39,12 +39,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--data-dir", default=str(REPO_ROOT / "occlusion_datasets"))
     p.add_argument("--image-dir", default=str(REPO_ROOT / "crops"))
     p.add_argument("--out", default=str(REPO_ROOT / "eval" / "cache" / "val_segformer_features.csv"))
+    p.add_argument("--source", choices=["val", "test"], default="val",
+                   help="Which subset to cache features for. "
+                        "'val' = stratified val split of train.csv (has GT labels). "
+                        "'test' = test_students.csv (no GT labels — for submission inference).")
     p.add_argument("--val-frac", type=float, default=0.15)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--batch-size", type=int, default=8)
     p.add_argument("--flip", action="store_true",
                    help="Also flip each image horizontally before parsing (for TTA cache)")
-    p.add_argument("--limit", type=int, default=0, help="0 = full val")
+    p.add_argument("--limit", type=int, default=0, help="0 = full")
     return p.parse_args()
 
 
@@ -71,17 +75,23 @@ def parse_val(parser: FaceParser, image_dir: Path, df: pd.DataFrame,
 
 def main() -> None:
     args = parse_args()
-    train_csv = pd.read_csv(Path(args.data_dir) / "train.csv")
-    _, val_df = stratified_split(train_csv, val_frac=args.val_frac, seed=args.seed)
+    if args.source == "val":
+        train_csv = pd.read_csv(Path(args.data_dir) / "train.csv")
+        _, df = stratified_split(train_csv, val_frac=args.val_frac, seed=args.seed)
+        has_labels = True
+    else:
+        df = pd.read_csv(Path(args.data_dir) / "test_students.csv")
+        has_labels = False
     if args.limit > 0:
-        val_df = val_df.head(args.limit)
-    print(f"caching SegFormer features on {len(val_df)} val rows (flip={args.flip})")
+        df = df.head(args.limit)
+    print(f"caching SegFormer features on {len(df)} {args.source} rows (flip={args.flip})")
 
     parser = FaceParser()
-    feats = parse_val(parser, Path(args.image_dir), val_df,
+    feats = parse_val(parser, Path(args.image_dir), df,
                       batch_size=args.batch_size, flip=args.flip)
-    feats["target"] = val_df["FaceOcclusion"].values
-    feats["gender"] = val_df["gender"].values
+    if has_labels:
+        feats["target"] = df["FaceOcclusion"].values
+        feats["gender"] = df["gender"].values
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
