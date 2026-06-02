@@ -36,3 +36,6 @@ Thumbs.db
 # Additional repositories
 3DDFA_V2/
 face-parsing.PyTorch/
+GroundingDINO/
+MobileSAM/
+
