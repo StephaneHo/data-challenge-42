@@ -112,14 +112,16 @@ def compute_occlusion(img_bgr, app, tddfa, net, device, to_tensor):
     cv2.fillConvexPoly(mask_theoretical, hull, 1)
 
     # BiSeNet face parsing
+    # IMPORTANT (fix 2026-06-02): BiSeNet (face-parsing.PyTorch) requires 512x512
+    # input per its reference test.py. Without resize, the model misses many face
+    # parts on 224x224 crops. Resize first, infer, then resize output back.
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    input_tensor = to_tensor(Image.fromarray(img_rgb)).unsqueeze(0).to(device)
+    pil_512 = Image.fromarray(img_rgb).resize((512, 512), Image.BILINEAR)
+    input_tensor = to_tensor(pil_512).unsqueeze(0).to(device)
     with torch.inference_mode():
         out = net(input_tensor)[0]
-    parsing = out.squeeze(0).cpu().numpy().argmax(0)
-    # Upsample if needed
-    if parsing.shape != (h, w):
-        parsing = cv2.resize(parsing.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST)
+    parsing_512 = out.squeeze(0).cpu().numpy().argmax(0).astype(np.uint8)
+    parsing = cv2.resize(parsing_512, (w, h), interpolation=cv2.INTER_NEAREST)
 
     # Visible skin mask
     visible_skin_mask = np.isin(parsing, VISIBLE_FACE_CLASSES).astype(np.uint8)

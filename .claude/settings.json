@@ -9,7 +9,8 @@
       "Read(//c/Users/steph/AI_Projects/PART_4/Data_Challenge_42/data-challenge-42/**)",
       "Bash(stat -c '%y' \"C:/Users/steph/AppData/Local/Temp/claude/c--Users-steph-AI-Projects-PART-4-Data-Challenge-42-data-challenge-42/86522b0d-93ae-4a03-9089-32c9af59a159/tasks/bxbk5km8o.output\" 2>&1 ; date ; echo \"---\" ; tail -3 \"C:/Users/steph/AppData/Local/Temp/claude/c--Users-steph-AI-Projects-PART-4-Data-Challenge-42-data-challenge-42/86522b0d-93ae-4a03-9089-32c9af59a159/tasks/bxbk5km8o.output\" 2>&1 | tr '\\\\r' '\\\\n' | tail -5 ; echo \"---\" ; ls -la \"c:/Users/steph/AI_Projects/PART_4/Data_Challenge_42/data-challenge-42/eval/cache/\" 2>&1)",
       "Bash(.venv/Scripts/python.exe scripts/zero_shot/run_ablation.py --features eval/cache/val_segformer_features.csv --features-flipped eval/cache/val_segformer_features_flip.csv --only simple_hull_scaled_power07 simple_hull_scaled_power05 class_weighted class_weighted_scaled adaptive_floor piecewise_boost --prefix zs --design-samples \"same 5 train samples as previous variants\" --force)",
-      "Bash(.venv/Scripts/python.exe scripts/compare_reports.py --filter \"zs_\" --markdown)"
+      "Bash(.venv/Scripts/python.exe scripts/compare_reports.py --filter \"zs_\" --markdown)",
+      "Bash(MKL_NUM_THREADS=4 OMP_NUM_THREADS=4 .venv/Scripts/python.exe scripts/zero_shot/cross_test_4_pipelines.py --n-per-bin 100 --out eval/cache/val_cross_4pipelines_fixed.csv)"
     ]
   }
 }

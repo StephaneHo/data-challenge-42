@@ -65,12 +65,15 @@ DEFAULT_MODEL = "jonathandinu/face-parsing"
 class FaceParser:
     """Wraps a SegFormer face-parsing model. Designed for batched CPU inference on 224x224 crops.
 
-    The default processor resizes inputs to 512x512, which is ~5x slower than needed for our
-    already-cropped 224x224 inputs. We override do_resize=False to process at native resolution.
+    IMPORTANT (fix 2026-06-02): the default processor resizes inputs to 512x512, which is the
+    resolution SegFormer was trained at. We previously set do_resize=False to gain speed on our
+    224x224 crops, but this introduces small but systematic differences (1-8% pixel mismatch vs
+    the canonical 512 path) that propagate into the occlusion ratio.
+    The do_resize=True default is now restored so downstream features are clean.
     """
 
     def __init__(self, model_name: str = DEFAULT_MODEL, device: str | torch.device | None = None,
-                 do_resize: bool = False):
+                 do_resize: bool = True):
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = torch.device(device)
