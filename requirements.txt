@@ -16,3 +16,9 @@ torchvision>=0.20
 transformers>=4.40
 safetensors>=0.4
 huggingface_hub>=0.20
+
+# Specific models for zero-shot
+gdown>=6.1.0
+insightface==1.01
+opencv-python>=4.13.0.92
+onnxruntime>=1.26.0
