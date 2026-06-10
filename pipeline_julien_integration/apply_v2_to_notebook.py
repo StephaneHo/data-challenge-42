@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 NB_PATH = Path(__file__).parent / "DataChallengeJulien_TF_with_v2_fallback.ipynb"
+NB_SOURCE = Path(__file__).parent.parent / "notebooks" / "DataChallengeJulien_TF.ipynb"
 
 # Code a INSERER ou REMPLACER
 NEW_IMPORT_CELL = """# === [Etape 2 du README pipeline_julien_integration] ===
@@ -17,8 +18,14 @@ REPO_ROOT = os.path.abspath(os.path.join(os.getcwd(), '..', '..'))  # 2 niveaux 
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from pipeline_julien_integration import apply_v2_fallback, detect_plante_regime
-print("v2 fallback charge OK :", apply_v2_fallback)
+# Import des 2 versions (avec et sans dampening) pour pouvoir comparer
+from pipeline_julien_integration import (
+    apply_v2_fallback,                   # version originale (bit-exact sur cas normaux)
+    apply_v2_fallback_with_dampening,    # version avec dampening hair/hat (+2% CV)
+    detect_plante_regime,
+)
+print("v2 fallback charge OK            :", apply_v2_fallback)
+print("v2 fallback + dampening charge OK :", apply_v2_fallback_with_dampening)
 """
 
 # Texte a ajouter dans cell 35 (apres la definition de HAT_S = [14])
@@ -47,8 +54,10 @@ ETAPE_3_INSERT = """
 # Bloc a REMPLACER dans cell 37 (le if pred_gender == 'M' / elif 'F')
 OLD_GENDER_BLOCK_START = "if pred_gender == 'M':"
 
-ETAPE_4_REPLACE = """    ### [Etape 4 du README] Appel du v2 fallback (remplace le bloc if/elif gender)
-    occlusion_score = apply_v2_fallback(
+ETAPE_4_REPLACE = """    ### [Etape 4 du README] Appel du v2 fallback + dampening (remplace le bloc if/elif gender)
+    # Note : on utilise apply_v2_fallback_with_dampening (gain CV +2% vs apply_v2_fallback seul).
+    # Pour desactiver le dampening : remplacer par apply_v2_fallback (memes arguments).
+    occlusion_score = apply_v2_fallback_with_dampening(
         pred_gender=pred_gender,
         hair_ratio_b=hair_ratio_b, hat_ratio_b=hat_ratio_b, other_ratio_b=other_ratio_b,
         hair_ratio_s=hair_ratio_s, hat_ratio_s=hat_ratio_s, other_ratio_s=other_ratio_s,
@@ -57,11 +66,22 @@ ETAPE_4_REPLACE = """    ### [Etape 4 du README] Appel du v2 fallback (remplace 
         skin_only_s_ratio=skin_only_s_ratio,
         M_WEIGHTS=M_WEIGHTS,
         F_WEIGHTS=F_WEIGHTS,
+        # dampening_threshold=0.35,  # defaut valide en CV
+        # dampening_slope=0.5,       # defaut valide en CV
     )
 """
 
 
 def main():
+    # On part TOUJOURS du notebook original de Julien pour assurer une regeneration propre
+    # (eviter les patches successifs qui s'empilent)
+    if NB_SOURCE.exists():
+        import shutil
+        shutil.copy(NB_SOURCE, NB_PATH)
+        print(f"Notebook regenere depuis l'original : {NB_SOURCE.name}")
+    else:
+        print(f"WARN : notebook source introuvable, on patch le fichier existant : {NB_PATH.name}")
+
     nb = json.load(open(NB_PATH, encoding="utf-8"))
     print(f"Notebook charge : {len(nb['cells'])} cellules")
 
