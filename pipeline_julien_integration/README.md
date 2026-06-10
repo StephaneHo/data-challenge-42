@@ -161,6 +161,88 @@ print(Counter(regimes_list))
 
 ---
 
+---
+
+## ⭐ Variante : avec dampening sur hair/hat (gain supplémentaire +2%)
+
+### L'observation
+
+Sur val (15K), avec les coefficients de Julien, on a un pattern net de **sur-prédiction quand hair ou hat sont élevés** :
+
+| Feature | n images > 0.30 | err moyenne | % sur-prédites |
+|---|---|---|---|
+| hair > 0.30 | 669 | +0.055 | 22% |
+| hair > 0.50 | 27 | +0.240 | **89%** |
+| hair > 0.70 | 4 | +0.435 | **100%** |
+| **hat > 0.30** | **159** | **+0.138** | **53%** |
+| **hat > 0.50** | **20** | **+0.330** | **90%** |
+| **hat > 0.70** | **4** | **+0.562** | **100%** |
+
+**Intuition** : quand beaucoup de cheveux/chapeau sont détectés, en réalité l'occlusion n'est pas si forte (mèches qui laissent passer la peau, SegFormer qui détecte "chapeau" sur cheveux longs, etc.). La formule linéaire sur-prédit ces cas.
+
+### La solution : dampening piecewise
+
+Au lieu de `contribution = w_hair * hair_ratio` (linéaire), on utilise :
+
+```python
+def damp(x, threshold=0.35, slope=0.5):
+    if x < threshold:
+        return x                              # inchangé
+    else:
+        return threshold + slope * (x - threshold)  # pente réduite
+
+# Exemple :
+damp(0.20) = 0.20    # sous-seuil, inchangé
+damp(0.50) = 0.425   # 0.35 + 0.5*0.15
+damp(0.70) = 0.525   # 0.35 + 0.5*0.35
+```
+
+On applique `damp` aux 4 features `hair_ratio_b`, `hair_ratio_s`, `hat_ratio_b`, `hat_ratio_s`. On **NE** dampe **PAS** `other_ratio_b` et `other_ratio_s` (pas de pattern de sur-pred observé sur eux).
+
+### Résultats CV 5-fold sur val
+
+| Variante | brief | CV folds GAIN | std |
+|---|---|---|---|
+| Julien linear (référence) | 0.00708 | - | - |
+| v2 fallback seul | 0.00642 | **5/5** | 0.00035 |
+| **v2 fallback + dampening (hair+hat, thr=0.35, slope=0.5)** | **0.00631** | **5/5** | 0.00040 |
+
+→ **+2% de gain supplémentaire** apporté par le dampening, **5/5 folds GAIN** (robuste).
+
+### Comment l'utiliser
+
+Si tu veux activer le dampening, **remplace** `apply_v2_fallback` par `apply_v2_fallback_with_dampening` dans l'Étape 2 et l'Étape 4 :
+
+```python
+# Étape 2 (import)
+from pipeline_julien_integration import apply_v2_fallback_with_dampening
+
+# Étape 4 (appel)
+occlusion_score = apply_v2_fallback_with_dampening(
+    pred_gender=pred_gender,
+    hair_ratio_b=hair_ratio_b, hat_ratio_b=hat_ratio_b, other_ratio_b=other_ratio_b,
+    hair_ratio_s=hair_ratio_s, hat_ratio_s=hat_ratio_s, other_ratio_s=other_ratio_s,
+    skin_only_b_ratio=skin_only_b_ratio,
+    bg_b_ratio=bg_b_ratio,
+    skin_only_s_ratio=skin_only_s_ratio,
+    M_WEIGHTS=M_WEIGHTS,
+    F_WEIGHTS=F_WEIGHTS,
+    # Optionnel : tuner les hyperparametres (defauts = valeurs validees en CV)
+    # dampening_threshold=0.35,
+    # dampening_slope=0.5,
+)
+```
+
+Pour **désactiver le dampening** (revenir à `apply_v2_fallback` exact) : passe `dampening_slope=1.0`.
+
+### Caveat
+
+Le dampening **n'est plus bit-exact** avec ta formule originale, même sur images normales : quand `hair_ratio > 0.35` ou `hat_ratio > 0.35`, la pred diminue. Sur ~98% des images (hair/hat < 0.35), comportement identique à `apply_v2_fallback`.
+
+→ Recommandation : **commence par tester sans dampening** (`apply_v2_fallback`), mesure le score, puis essaye `apply_v2_fallback_with_dampening` pour voir si tu gagnes ~2%.
+
+---
+
 ## Tests faits sur val (15K images)
 
 | Approche | val brief | CV folds GAIN | Verdict |

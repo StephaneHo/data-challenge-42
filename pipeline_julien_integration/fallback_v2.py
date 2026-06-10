@@ -200,6 +200,86 @@ def apply_v2_fallback(pred_gender,
 
 
 # =============================================================================
+# DAMPENING (variante : reduit la sur-prediction quand hair ou hat sont eleves)
+# =============================================================================
+# Observation sur val (15K) avec les coefficients de Julien :
+#
+#   hair_max > 0.50 : 89% des images sur-predites (delta moyen +0.24)
+#   hair_max > 0.70 : 100% des images sur-predites (delta moyen +0.44)
+#   hat_max  > 0.50 : 90% des images sur-predites (delta moyen +0.33)
+#   hat_max  > 0.70 : 100% des images sur-predites (delta moyen +0.56)
+#
+# Idee de Julien : quand beaucoup de cheveux/chapeau sont detectes, en realite
+# l'occlusion n'est pas si forte (meches qui laissent passer la peau, fausse
+# detection de chapeau sur cheveux longs, etc.). On dampe la contribution :
+#
+#   damp(x) = x                      si x < threshold
+#           = threshold + slope*(x - threshold)   sinon
+#
+# avec threshold=0.35 et slope=0.5 :
+#   - x = 0.10 -> damp(0.10) = 0.10  (inchange)
+#   - x = 0.50 -> damp(0.50) = 0.35 + 0.5*0.15 = 0.425  (au lieu de 0.50)
+#   - x = 0.70 -> damp(0.70) = 0.35 + 0.5*0.35 = 0.525  (au lieu de 0.70)
+#
+# CV 5/5 GAIN sur val. Combine avec v2 fallback, gain attendu sur brief : -13%
+# (vs -11% pour v2 fallback seul).
+#
+# IMPORTANT : on ne dampe QUE hair et hat. other_b et other_s restent lineaires
+# (pas de pattern de sur-prediction observe sur ces features).
+DEFAULT_DAMPENING_THRESHOLD = 0.35
+DEFAULT_DAMPENING_SLOPE = 0.5
+
+
+def _damp(x, threshold, slope):
+    """Piecewise linear : identite en dessous du seuil, pente reduite au-dessus."""
+    if x < threshold:
+        return x
+    return threshold + slope * (x - threshold)
+
+
+def apply_v2_fallback_with_dampening(pred_gender,
+                                      hair_ratio_b, hat_ratio_b, other_ratio_b,
+                                      hair_ratio_s, hat_ratio_s, other_ratio_s,
+                                      skin_only_b_ratio, bg_b_ratio, skin_only_s_ratio,
+                                      M_WEIGHTS, F_WEIGHTS,
+                                      dampening_threshold=DEFAULT_DAMPENING_THRESHOLD,
+                                      dampening_slope=DEFAULT_DAMPENING_SLOPE):
+    """Variante de apply_v2_fallback qui ajoute un dampening sur hair et hat.
+
+    Mecanique identique a apply_v2_fallback (meme detection plante, meme fallback)
+    SAUF que hair_ratio_b, hair_ratio_s, hat_ratio_b, hat_ratio_s sont dampes
+    avant utilisation dans la formule. other_ratio_b et other_ratio_s NE SONT PAS
+    dampes (pas de pattern de sur-pred observe dessus).
+
+    Args:
+        ... (identiques a apply_v2_fallback) ...
+        dampening_threshold (float, default 0.35) : seuil au-dessus duquel la pente
+            est reduite. En dessous, comportement lineaire identique a apply_v2_fallback.
+        dampening_slope (float, default 0.5) : pente au-dessus du seuil. Mettre 1.0
+            pour desactiver le dampening (revient a apply_v2_fallback).
+
+    Returns:
+        float : occlusion score clip entre 0 et 1.
+    """
+    # Damp hair et hat (BiSeNet et SegFormer). other_b et other_s INCHANGES.
+    hair_b_d = _damp(hair_ratio_b, dampening_threshold, dampening_slope)
+    hat_b_d  = _damp(hat_ratio_b,  dampening_threshold, dampening_slope)
+    hair_s_d = _damp(hair_ratio_s, dampening_threshold, dampening_slope)
+    hat_s_d  = _damp(hat_ratio_s,  dampening_threshold, dampening_slope)
+
+    # Le reste : identique a apply_v2_fallback mais avec features dampees
+    return apply_v2_fallback(
+        pred_gender=pred_gender,
+        hair_ratio_b=hair_b_d, hat_ratio_b=hat_b_d, other_ratio_b=other_ratio_b,
+        hair_ratio_s=hair_s_d, hat_ratio_s=hat_s_d, other_ratio_s=other_ratio_s,
+        skin_only_b_ratio=skin_only_b_ratio,
+        bg_b_ratio=bg_b_ratio,
+        skin_only_s_ratio=skin_only_s_ratio,
+        M_WEIGHTS=M_WEIGHTS, F_WEIGHTS=F_WEIGHTS,
+    )
+
+
+# =============================================================================
 # UTILITAIRE DIAGNOSTIC (optionnel, pour debug / inspection)
 # =============================================================================
 def detect_plante_regime(skin_only_b_ratio, bg_b_ratio, skin_only_s_ratio):
