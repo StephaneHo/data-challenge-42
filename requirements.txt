@@ -22,3 +22,10 @@ gdown>=6.1.0
 insightface==1.01
 opencv-python>=4.13.0.92
 onnxruntime>=1.26.0
+
+# Dependencies for 3DDFA_V2 pipeline
+pyyaml>=6.0
+scipy>=1.10
+scikit-image>=0.20
+imageio>=2.30
+imageio-ffmpeg>=0.4
