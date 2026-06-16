@@ -41,3 +41,12 @@ MobileSAM/
 
 # Results
 *.csv
+
+# Other folders
+figures/
+pipeline_julien_integration/
+results/
+scripts/
+src/
+STRATEGIE.md
+task_brief.pdf
