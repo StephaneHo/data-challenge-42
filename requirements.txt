@@ -19,7 +19,7 @@ huggingface_hub>=0.20
 
 # Specific models for zero-shot
 gdown>=6.1.0
-insightface==1.01
+insightface==1.0.1
 opencv-python>=4.13.0.92
 onnxruntime>=1.26.0
 prettytable>=3.17.0
